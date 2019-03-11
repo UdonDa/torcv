@@ -101,5 +101,3 @@ dependencies:
   - thinc=6.12.1=py37h637b7d7_1000
   - pytorch=1.0.1=py3.7_cuda10.0.130_cudnn7.4.2_2
   - torchvision=0.2.2=py_3
-prefix: /home/yanai-lab/horita-d/.pyenv/versions/anaconda3-5.1.0/envs/torcv
-
