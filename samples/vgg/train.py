@@ -31,7 +31,7 @@ def main(config):
     train_loader, test_loader = get_cifar10(download=False, transform=transform)
     model = vgg19_bn(pretrained=False)
 
-    solver = Ciffar10_Solver(config, train_loader=train_loader, test_loader=test_loader, num_classes=10, model=model)
+    solver = Ciffar10_Solver(config, train_loader=train_loader, test_loader=test_loader, model=model)
     solver.train()
 
 
