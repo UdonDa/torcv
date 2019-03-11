@@ -15,3 +15,5 @@ dist/
 check_autopep8
 
 tests/bin/
+
+results/
