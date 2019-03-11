@@ -1,1 +1,17 @@
 */data/*
+*~
+*.egg-info/
+*.egg/
+*.pyc
+*.c
+*.cpp
+*.so
+build
+\#*\#
+.\#*
+.coverage
+dist/
+.cache/
+check_autopep8
+
+tests/bin/
