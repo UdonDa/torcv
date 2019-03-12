@@ -26,9 +26,12 @@ class Ciffar10_Solver(object):
 
         if self.config.optimizer == 'sgd':
             self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.config.lr, momentum=self.config.momentum)
+        
+        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=[150, 250, 350], gamma=0.1)
 
     def train(self):
         for epoch in range(self.config.total_epochs):
+            self.scheduler.step()
             for i, (x, label) in enumerate(self.train_loader):
                 x, label = x.to(self.device), label.to(self.device)
 
