@@ -10,4 +10,9 @@ if __name__ == '__main__':
     model = densenet169(pretrained=False)
     model = densenet121(pretrained=False)
     model = densenet201(pretrained=False)
-    # print_network(model, 'dense net ')
+    
+    import torch
+    input = torch.randn(1,3,224,224)
+    output, feature = model(input)
+    print(output.size()) # -> [1, 1000]
+    print(feature.size()) # -> [1, 1920, 7, 7]

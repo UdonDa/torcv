@@ -41,11 +41,11 @@ class VGG(nn.Module):
             self._initialize_weights()
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.avgpool(x)
+        features = self.features(x) # -> [1, 512, 7, 7]
+        x = self.avgpool(features)
         x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        return x
+        x = self.classifier(x) # -> [1, 1000]
+        return x, features
 
     def _initialize_weights(self):
         for m in self.modules():

@@ -116,10 +116,10 @@ class Inception3(nn.Module):
         # N x 1280 x 8 x 8
         x = self.Mixed_7b(x)
         # N x 2048 x 8 x 8
-        x = self.Mixed_7c(x)
+        features = self.Mixed_7c(x)
         # N x 2048 x 8 x 8
         # Adaptive average pooling
-        x = F.adaptive_avg_pool2d(x, (1, 1))
+        x = F.adaptive_avg_pool2d(features, (1, 1))
         # N x 2048 x 1 x 1
         x = F.dropout(x, training=self.training)
         # N x 2048 x 1 x 1
@@ -128,8 +128,8 @@ class Inception3(nn.Module):
         x = self.fc(x)
         # N x 1000 (num_classes)
         if self.training and self.aux_logits:
-            return x, aux
-        return x
+            return x, aux, features
+        return x, features
 
 
 class InceptionA(nn.Module):

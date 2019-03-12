@@ -8,45 +8,14 @@ from torcv.functions.SynchronizedBatchNorm import SynchronizedBatchNorm2d
 from torcv.links.model.deeplabv3plus.aspp import build_aspp
 from torcv.links.model.deeplabv3plus.decoder import build_decoder
 
-
-from torcv.links.model.resnet.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
-from torcv.links.model.senet.senet import senet154, se_resnet50, se_resnet101, se_resnet152, se_resnext50_32x4d, se_resnext101_32x4d
-from torcv.links.model.xception.xception import aligned_xception
-from torcv.links.model.mobilenet.mobilenet import mobilenetV2
-from torcv.links.model.drn.drn import drn_a_resnet50, drn_c_26, drn_c_42, drn_c_58, drn_d_22, drn_d_24, drn_d_38, drn_d_40, drn_d_54, drn_d_105
+from torcv.links.model.deeplabv3plus.backbone.mobilenet import mobilenetV2
+from torcv.links.model.deeplabv3plus.backbone.drn import drn_a_resnet50, drn_c_26, drn_c_42, drn_c_58, drn_d_22, drn_d_24, drn_d_38, drn_d_40, drn_d_54, drn_d_105
+from torcv.links.model.deeplabv3plus.backbone.xception import aligned_xception
 
 
 def build_backbone(backbone='drn_d_54', pretrained=True, num_classes=1000):
-    # ResNet
-    if backbone == 'resnet18':
-        return resnet18(pretrained=pretrained)
-    elif backbone == 'resnet34':
-        return resnet34(pretrained=pretrained)
-    elif backbone == 'resnet50':
-        return resnet50(pretrained=pretrained)
-    elif backbone == 'resnet101':
-        return resnet101(pretrained=pretrained)
-    elif backbone == 'resnet152':
-        return resnet152(pretrained=pretrained)
-    
-    # SENet
-    elif backbone == 'senet154':
-        return senet154(num_classes=num_classes)
-
-    elif backbone == 'se_resnet50':
-        return se_resnet50(num_classes=num_classes)
-    elif backbone == 'se_resnet101':
-        return se_resnet101(num_classes=num_classes)
-    elif backbone == 'se_resnet152':
-            return se_resnet152(num_classes=num_classes)
-
-    elif backbone == 'se_resnext50_32x4d':
-            return se_resnext50_32x4d(num_classes=num_classes)
-    elif backbone == 'se_resnext101_32x4d':
-            return se_resnext101_32x4d(num_classes=num_classes)
-
     # xception
-    elif backbone == 'xception':
+    if backbone == 'xception':
         return aligned_xception(pretrained=pretrained)
     # mobilenet
     elif backbone == 'mobilenet':
@@ -83,6 +52,7 @@ class DeepLabV3plus(nn.Module):
             backbone (str): [...]
         """
         super(DeepLabV3plus, self).__init__()
+        self.backbonename = backbone
         if backbone[0:3] == 'drn':
             output_stride = 8
 
@@ -98,13 +68,21 @@ class DeepLabV3plus(nn.Module):
         if freeze_bn:
             self.freeze_bn()
 
+
     def forward(self, input): # input: [1, 3, 513, 513]
-        x, low_level_feat = self.backbone(input)
+        if self.backbonename[0:3] == 'drn' or self.backbonename == 'xception' or self.backbonename == 'mobilenet':
+            x, low_level_feat = self.backbone(input)
+        else:
+            x, low_level_feat = self.backbone(input)
+            print('x.size(): ', x.size())
+            print('low_level_feat.size(): ', low_level_feat.size())
+            exit()
         x = self.aspp(x)
         x = self.decoder(x, low_level_feat)
         x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)
 
         return x
+
 
     def freeze_bn(self):
         for m in self.modules():
@@ -112,6 +90,7 @@ class DeepLabV3plus(nn.Module):
                 m.eval()
             elif isinstance(m, nn.BatchNorm2d):
                 m.eval()
+
 
     def get_1x_lr_params(self):
         modules = [self.backbone]
@@ -122,6 +101,7 @@ class DeepLabV3plus(nn.Module):
                     for p in m[1].parameters():
                         if p.requires_grad:
                             yield p
+
 
     def get_10x_lr_params(self):
         modules = [self.aspp, self.decoder]
