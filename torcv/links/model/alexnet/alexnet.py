@@ -43,11 +43,11 @@ class AlexNet(nn.Module):
         )
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.avgpool(x)
+        feature = self.features(x) # -> [1, 256, 6, 6]
+        x = self.avgpool(feature)
         x = x.view(x.size(0), 256 * 6 * 6)
-        x = self.classifier(x)
-        return x
+        x = self.classifier(x) # -> [1, 1000]
+        return x, feature
 
 
 def alexnet(pretrained=False, **kwargs):

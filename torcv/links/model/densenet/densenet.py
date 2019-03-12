@@ -110,11 +110,11 @@ class DenseNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        features = self.features(x)
+        features = self.features(x) # -> [1, 1920, 7, 7]
         out = F.relu(features, inplace=True)
         out = F.adaptive_avg_pool2d(out, (1, 1)).view(features.size(0), -1)
-        out = self.classifier(out)
-        return out
+        out = self.classifier(out) # -> [1, 1000]
+        return out, features
 
 
 def densenet121(pretrained=False, **kwargs):

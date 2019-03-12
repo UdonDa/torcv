@@ -95,9 +95,9 @@ class SqueezeNet(nn.Module):
                     init.constant_(m.bias, 0)
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.classifier(x)
-        return x.view(x.size(0), self.num_classes)
+        features = self.features(x) # -> [1, 512, 13, 13]
+        x = self.classifier(features)
+        return x.view(x.size(0), self.num_classes), features
 
 
 def squeezenet1_0(pretrained=False, **kwargs):

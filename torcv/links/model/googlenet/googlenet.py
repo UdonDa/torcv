@@ -109,7 +109,7 @@ class GoogLeNet(nn.Module):
         x = self.inception4a(x)
         # N x 512 x 14 x 14
         if self.training and self.aux_logits:
-            aux1 = self.aux1(x)
+            aux1 = self.aux1(x) # -> [1, 1000]
 
         x = self.inception4b(x)
         # N x 512 x 14 x 14
@@ -118,7 +118,7 @@ class GoogLeNet(nn.Module):
         x = self.inception4d(x)
         # N x 528 x 14 x 14
         if self.training and self.aux_logits:
-            aux2 = self.aux2(x)
+            aux2 = self.aux2(x) # -> [1, 1000]
 
         x = self.inception4e(x)
         # N x 832 x 14 x 14
@@ -126,19 +126,19 @@ class GoogLeNet(nn.Module):
         # N x 832 x 7 x 7
         x = self.inception5a(x)
         # N x 832 x 7 x 7
-        x = self.inception5b(x)
+        feature = self.inception5b(x) # -> [1, 1024, 7, 7]
         # N x 1024 x 7 x 7
 
-        x = self.avgpool(x)
+        x = self.avgpool(feature)
         # N x 1024 x 1 x 1
         x = x.view(x.size(0), -1)
         # N x 1024
         x = self.dropout(x)
-        x = self.fc(x)
+        x = self.fc(x) # -> [1, 1000]
         # N x 1000 (num_classes)
         if self.training and self.aux_logits:
-            return aux1, aux2, x
-        return x
+            return aux1, aux2, x, feature
+        return x, feature
 
 
 class Inception(nn.Module):

@@ -3,11 +3,16 @@ sys.path.append('../../')
 
 import torcv.utils.debug.print_network as print_network
 from torcv.links.model.alexnet.alexnet import alexnet
+import torch
 
 
 if __name__ == '__main__':
     model = alexnet(pretrained=False)
-    print_network(model, 'alexnet')
+    # print_network(model, 'alexnet')
+    input = torch.randn(1,3,224,224)
+    output, feature = model(input)
+    print(output.size()) # -> [1, 1000]
+    print(feature.size()) # -> [1, 256, 6, 6]
 
     """
     AlexNet(
