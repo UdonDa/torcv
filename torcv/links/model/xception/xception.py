@@ -23,7 +23,7 @@ class SeparableConv2d(nn.Module):
 
         self.conv1 = nn.Conv2d(inplanes, inplanes, kernel_size, stride, 0, dilation,
                                groups=inplanes, bias=bias)
-        self.norm = BatchNorm(inplanes)
+        self.bn = BatchNorm(inplanes)
         self.pointwise = nn.Conv2d(inplanes, planes, 1, 1, 0, 1, 1, bias=bias)
 
     def forward(self, x):
@@ -278,3 +278,12 @@ class AlignedXception(nn.Module):
                     model_dict[k] = v
         state_dict.update(model_dict)
         self.load_state_dict(state_dict)
+
+def aligned_xception(pretrained=True):
+    if pretrained:
+        model = AlignedXception(BatchNorm=nn.BatchNorm2d, output_stride=16, pretrained=True)
+    else:
+        model = AlignedXception(BatchNorm=nn.BatchNorm2d, output_stride=16, pretrained=False)
+    return model
+
+
