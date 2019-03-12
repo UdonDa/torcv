@@ -9,7 +9,6 @@ import torch.nn as nn
 from torch.utils import model_zoo
 
 import math
-from __future__ import print_function, division, absolute_import
 from collections import OrderedDict
 
 
@@ -204,86 +203,86 @@ class SENet(nn.Module):
     def __init__(self, block, layer, groups, reduction=16, dropout_p=0.2,
                 inplanes=128, input_3x3=True, downsample_kernel_size=3,
                 downsample_padding=1, num_classes=1000):
-    """SENet
-    Args:
-        block (nn.Module): Bottleneck class.
-            - For SENet154: SEBottleneck
-            - For SE-ResNet models: SEResNetBottleneck
-            - For SE-ResNeXt models: SEResNeXtBottleneck
-        layers (list of int): Number of groups for the 3x3 conv in each
-            bottleneck block.
-            - For SENet154: 64
-            - For SE-ResNet models: 1
-            - For SE-ResNeXt models: 32
-        reduction (int) : Reduction ratio for Squeeze-and-Excitation modules.
-            - For all models: 16 (cite paper)
-        dropout_p (float or None): Drop probability for the Dropout layer.
-            If `None`, it means you do not use the Dropout layer.
-            - For SENet154: 0.2
-            - For SE-ResNet models: None
-            - For SE-ResNeXt models: None
-        inplanes (int): Number of input channels for layer1.
-            - For SENet154: 128
-            - For SE-ResNet models: 64
-            - For SE-ResNeXt models: 64
-        input_3x3 (bool): if `True`, use three 3x3 convs instead of
-            a single 7x7 conv in layer0.
-            - For SENet154: True
-            - For SE-ResNet models: False
-            - For SE-ResNeXt models: False
-        downsample_kernel_size (int): Kernel size for downsampling convs
-            in layer2, layer3, and layer4.
-            - For SENet154: 3
-            - For SE-ResNet models: 1
-            - For SE-ResNeXt models: 1
-        downsample_padding (int): Padding for downsampling conv
-            in layer2, layer3, and layer4.
-            - For SENet154: 1
-            - For SE-ResNet models: 0
-            - For SE-ResNeXt models: 0
-        num_classes (int): Number of outputs in `last_linear` layer.
-            - For all models: 1000 (ImageNet classes)
-    """
-    super(SENet, self).__init__()
-    self.inplanes = inplanes
-    if input_3x3:
-        self.layer0 = nn.Sequential(
-            nn.Conv2d(3, 64, 3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, inplanes, 3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(inplanes),
-            nn.ReLU(inplace=True),
+        """SENet
+        Args:
+            block (nn.Module): Bottleneck class.
+                - For SENet154: SEBottleneck
+                - For SE-ResNet models: SEResNetBottleneck
+                - For SE-ResNeXt models: SEResNeXtBottleneck
+            layers (list of int): Number of groups for the 3x3 conv in each
+                bottleneck block.
+                - For SENet154: 64
+                - For SE-ResNet models: 1
+                - For SE-ResNeXt models: 32
+            reduction (int) : Reduction ratio for Squeeze-and-Excitation modules.
+                - For all models: 16 (cite paper)
+            dropout_p (float or None): Drop probability for the Dropout layer.
+                If `None`, it means you do not use the Dropout layer.
+                - For SENet154: 0.2
+                - For SE-ResNet models: None
+                - For SE-ResNeXt models: None
+            inplanes (int): Number of input channels for layer1.
+                - For SENet154: 128
+                - For SE-ResNet models: 64
+                - For SE-ResNeXt models: 64
+            input_3x3 (bool): if `True`, use three 3x3 convs instead of
+                a single 7x7 conv in layer0.
+                - For SENet154: True
+                - For SE-ResNet models: False
+                - For SE-ResNeXt models: False
+            downsample_kernel_size (int): Kernel size for downsampling convs
+                in layer2, layer3, and layer4.
+                - For SENet154: 3
+                - For SE-ResNet models: 1
+                - For SE-ResNeXt models: 1
+            downsample_padding (int): Padding for downsampling conv
+                in layer2, layer3, and layer4.
+                - For SENet154: 1
+                - For SE-ResNet models: 0
+                - For SE-ResNeXt models: 0
+            num_classes (int): Number of outputs in `last_linear` layer.
+                - For all models: 1000 (ImageNet classes)
+        """
+        super(SENet, self).__init__()
+        self.inplanes = inplanes
+        if input_3x3:
+            self.layer0 = nn.Sequential(
+                nn.Conv2d(3, 64, 3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 64, 3, stride=1, padding=1, bias=False),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, inplanes, 3, stride=1, padding=1, bias=False),
+                nn.BatchNorm2d(inplanes),
+                nn.ReLU(inplace=True),
+            )
+        else:
+            self.layer0 = nn.Sequential(
+                nn.Conv2d(3, inplanes, kernel_size=7, stride=2, padding=3, bias=False),
+                nn.BatchNorm2d(inplanes),
+                nn.ReLU(inplace=True),
+            )
+        
+        self.layer1 = self._make_layer(
+            block, planes=64, blocks=layer[0], groups=groups, reduction=reduction,
+            downsample_kernel_size=1, downsample_padding=0
         )
-    else:
-        self.layer0 = nn.Sequential(
-            nn.Conv2d(3, inplanes, kernel_size=7, stride=2, padding=3, bias=False),
-            nn.BatchNorm2d(inplanes),
-            nn.ReLU(inplace=True),
+        self.layer2 = self._make_layer(
+            block, planes=128, blocks=layer[1], stride=2, groups=groups, reduction=reduction,
+            downsample_kernel_size=downsample_kernel_size, downsample_padding=downsample_padding
         )
-    
-    self.layer1 = self._make_layer(
-        block, planes=64, blocks=layer[0], groups=groups, reduction=reduction,
-        downsample_kernel_size=1, downsample_padding=0
-    )
-    self.layer2 = self._make_layer(
-        block, planes=128, blocks=layer[1], stride=2, groups=groups, reduction=reduction,
-        downsample_kernel_size=DeprecationWarning, downsample_padding=downsample_padding
-    )
-    self.layer3 = self._make_layer(
-        block, planes=256, blocks=layer[2], stride=2, groups=groups, reduction=reduction,
-        downsample_kernel_size=downsample_kernel_size, downsample_padding=downsample_padding
-    )
-    self.layer4 = self._make_layer(
-        block, plane=512, blocks=layer[3], stride=2, groups=groups, reduction=reduction,
-        downsample_kernel_size=downsample_kernel_size, downsample_padding=downsample_padding
-    )
-    self.avg_pool = nn.AvgPool2d(7, stride=1)
-    self.dropout = nn.Dropout(dropout_p) if dropout_p is not None else None
-    self.last_layer = nn.Linear(512 * block.expansion, num_classes)
+        self.layer3 = self._make_layer(
+            block, planes=256, blocks=layer[2], stride=2, groups=groups, reduction=reduction,
+            downsample_kernel_size=downsample_kernel_size, downsample_padding=downsample_padding
+        )
+        self.layer4 = self._make_layer(
+            block, planes=512, blocks=layer[3], stride=2, groups=groups, reduction=reduction,
+            downsample_kernel_size=downsample_kernel_size, downsample_padding=downsample_padding
+        )
+        self.avg_pool = nn.AvgPool2d(7, stride=1)
+        self.dropout = nn.Dropout(dropout_p) if dropout_p is not None else None
+        self.last_layer = nn.Linear(512 * block.expansion, num_classes)
 
 
     def _make_layer(self, block, planes, blocks, groups, reduction=16, stride=1,
@@ -326,9 +325,8 @@ class SENet(nn.Module):
 
 def initialize_pretrained_model(model, num_classes, settings):
     assert num_classes == settings['num_classes'], \
-        'num_classes shoudle be {}, but is {}'.format(
-            settings['num_classes'], num_classes)
-    model.load_state_dict(model_zoo.load_url(settings[]'url'))
+        'num_classes shoudle be {}, but is {}'.format(settings['num_classes'], num_classes)
+    model.load_state_dict(model_zoo.load_url(settings['url']))
     model.input_space = settings['input_space']
     model.input_size = settings['input_size']
     model.input_range = settings['input_range']
@@ -340,7 +338,7 @@ def senet154(num_classes=1000, pretrained='imagenet'):
     model = SENet(SEBottleneck, [3,8,36,3], groups=64, reduction=16,
                     dropout_p=0.2, num_classes=num_classes)
     if pretrained is not None:
-        settings = pretrained_settings['senet'][pretrained]
+        settings = pretrained_settings['senet154'][pretrained]
         initialize_pretrained_model(model, num_classes, settings)
     return model
 
@@ -398,5 +396,3 @@ def se_resnext101_32x4d(num_classes=1000, pretrained='imagenet'):
         settings = pretrained_settings['se_resnext101_32x4d'][pretrained]
         initialize_pretrained_model(model, num_classes, settings)
     return model
-
-
