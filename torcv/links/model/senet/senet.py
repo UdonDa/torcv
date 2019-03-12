@@ -361,9 +361,9 @@ class SENet(nn.Module):
         return x
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.logits(x)
-        return x
+        feature = self.features(x) # -> [1, 2048, 7, 7]
+        x = self.logits(feature) # -> [1, num_classes]
+        return x, feature
 
 
 def initialize_pretrained_model(model, num_classes, settings):

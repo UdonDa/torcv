@@ -38,12 +38,12 @@ def build_backbone(backbone='drn_d_54', pretrained=True, num_classes=1000):
     elif backbone == 'se_resnet101':
         return se_resnet101(num_classes=num_classes)
     elif backbone == 'se_resnet152':
-            return se_resnet152(num_classes=num_classes)
+        return se_resnet152(num_classes=num_classes)
 
     elif backbone == 'se_resnext50_32x4d':
-            return se_resnext50_32x4d(num_classes=num_classes)
+        return se_resnext50_32x4d(num_classes=num_classes)
     elif backbone == 'se_resnext101_32x4d':
-            return se_resnext101_32x4d(num_classes=num_classes)
+        return se_resnext101_32x4d(num_classes=num_classes)
 
     # xception
     elif backbone == 'xception':
@@ -83,6 +83,7 @@ class DeepLabV3plus(nn.Module):
             backbone (str): [...]
         """
         super(DeepLabV3plus, self).__init__()
+        self.backbonename = backbone
         if backbone[0:3] == 'drn':
             output_stride = 8
 
@@ -99,7 +100,16 @@ class DeepLabV3plus(nn.Module):
             self.freeze_bn()
 
     def forward(self, input): # input: [1, 3, 513, 513]
-        x, low_level_feat = self.backbone(input)
+        if self.backbonename[0:3] == 'drn' or self.backbonename == 'xception' or self.backbonename == 'mobilenet':
+            x, low_level_feat = self.backbone(input)
+            # print(x.size())
+            # print(low_level_feat.size())
+            # exit()
+        else:
+            x, low_level_feat = self.backbone(input)
+        # print('x.size(): ', x.size())
+        # print('low_level_feat.size(): ', low_level_feat.size())
+        # exit()
         x = self.aspp(x)
         x = self.decoder(x, low_level_feat)
         x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)

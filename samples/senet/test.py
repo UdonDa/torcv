@@ -11,5 +11,6 @@ if __name__ == '__main__':
     # model = se_resnet50()
 
     z = torch.randn(1,3,224,224)
-    y = model(z)
-    print(y.size()) # -> [1, num_classes]
+    output, features = model(z)
+    print(output.size()) # -> [1, num_classes]
+    print(features.size()) # -> [1, 2048, 7, 7]
