@@ -7,8 +7,9 @@ from torcv.links.model.senet.senet import senet154, se_resnet50, se_resnet101, s
 import torch
 
 if __name__ == '__main__':
-    model = senet154()
-    model = se_resnet50()
+    model = senet154(pretrained=None, num_classes=100)
+    # model = se_resnet50()
 
     z = torch.randn(1,3,224,224)
     y = model(z)
+    print(y.size()) # -> [1, num_classes]
