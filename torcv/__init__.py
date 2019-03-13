@@ -1,7 +1,7 @@
 import pkg_resources
 
 
-from torcv import dataset
+from torcv import datasets
 # from torcv import evaluations
 # from torcv import extentions
 # from torcv import functions
