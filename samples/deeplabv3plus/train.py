@@ -8,14 +8,20 @@ import torch.nn as nn
 
 from torcv.utils.loss.segmentation_loss import SegmentationLosses
 
+from torcv.utils.logger.saver import Saver
+from torcv.utils.logger.summaries import TensorboardSummary
+
 
 class Solver(object):
 
     def __init__(self, args):
         self.args = args
 
-        
-
+        self.saver = Saver(args)
+        self.saver.save_experiment_config()
+        # Define Tensorboard
+        self.summary = TensorboardSummary(self.saver.experiment_dir)
+        self.writer = self.summary.create_summary()
 
 
 if __name__ == '__main__':
