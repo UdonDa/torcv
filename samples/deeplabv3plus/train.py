@@ -1,3 +1,7 @@
+import sys
+sys.path.append('../../')
+
+
 import argparse
 import os
 import numpy as np
@@ -10,18 +14,28 @@ from torcv.utils.loss.segmentation_loss import SegmentationLosses
 
 from torcv.utils.logger.saver import Saver
 from torcv.utils.logger.summaries import TensorboardSummary
+from torcv.utils.metrics.segmentation_evaluator import Evaluator
+from torcv.solver.lr_scheduler.segmention_scheduler import LR_Scheduler
 
 
 class Solver(object):
 
     def __init__(self, args):
         self.args = args
-
+        # Savar
         self.saver = Saver(args)
         self.saver.save_experiment_config()
-        # Define Tensorboard
+        # Tensorboard
         self.summary = TensorboardSummary(self.saver.experiment_dir)
         self.writer = self.summary.create_summary()
+
+        # Dataloader
+        kwargs = {'num_workers:': args.num_workers, 'pin_memory': True}
+        self.train_loader, self.val_loader, self.test_loader, self.nclass = 
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -96,7 +110,16 @@ if __name__ == '__main__':
                         help='evaluuation interval (default: 1)')
     parser.add_argument('--no-val', action='store_true', default=False,
                         help='skip validation during training')
+
+    # dataset path
+    parser.add_argument('--pascal_dataset_path', type=str, default='./dataset/pascal/')
+    parser.add_argument('--sbd_dataset_path', type=str, default='./dataset/sbd/')
+    parser.add_argument('--cityscapes_dataset_path', type=str, default='./dataset/cityscapes/')
+    parser.add_argument('--coco_dataset_path', type=str, default='./dataset/coco/')
+
     args = parser.parse_args()
+    
+    
 
     if args.epochs is None:
         epoches = {
