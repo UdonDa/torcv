@@ -16,7 +16,6 @@ __all__ = ['get_cifar10', 'get_pascalvoc']
 
 def trainsforms_default(sample):
     t = transforms.Compose([
-        transforms.RandomHorizontalFlip(),
         transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         transforms.ToTensor()
     ])
@@ -38,19 +37,28 @@ def get_cifar10(args = None, download=True, transforms_train=None, transforms_te
 
     return train_loader, test_loader
 
-def get_pascalvoc(args, transforms_train=None, transforms_test=trainsforms_default):
+
+def get_pascalvoc(args, base_dir=None, transforms_train=None, transforms_test=trainsforms_default):
     """To get train and val dataloader of Pascal VOC
     Args:
         args (argparse): Conclude batch_size.
         transforms_train (torchvision.transform): Do train data augmentation.
+    Return:
+        voc_train_loader (DataLoader): for train.
+        voc_val_loader (DataLoader): for test.
+        voc_test_loader (None): None
+        num_class (int): the number of classes.
     """
-    voc_train = VOCSegmentation(args, split='train', transform=transforms_train)
-    voc_val = VOCSegmentation(args, split='val', transform=transforms_test)
+    voc_train = VOCSegmentation(args, base_dir=base_dir, split='train', transform=transforms_train)
+    voc_val = VOCSegmentation(args, base_dir=base_dir, split='val', transform=transforms_test)
+    voc_test = None
+    num_class = VOCSegmentation.NUM_CLASSES
 
-    voc_train = DataLoader(voc_train, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True, pin_memory=True)
-    voc_val = DataLoader(voc_val, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+    voc_train_loader = DataLoader(voc_train, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True, pin_memory=True)
+    voc_val_loader = DataLoader(voc_val, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+    voc_test_loader = None
 
-    return voc_train, voc_val
+    return voc_train_loader, voc_val_loader, voc_test_loader, num_class
 
 
 
@@ -72,6 +80,7 @@ class VOCSegmentation(Dataset):
         """
         super().__init__()
         self.base_dir = base_dir
+        print('base_dir: ', self.base_dir)
         self.image_dir = os.path.join(self.base_dir, 'JPEGImages')
         self.cat_dir = os.path.join(self.base_dir, 'SegmentationClass')
 

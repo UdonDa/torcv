@@ -9,6 +9,7 @@ import numpy as np
 from torcv.links.model.deeplabv3plus.deeplabv3plus import deeplabV3plus
 import torch
 import torch.nn as nn
+from torchvision import transforms
 
 from torcv.utils.loss.segmentation_loss import SegmentationLosses
 
@@ -17,10 +18,20 @@ from torcv.utils.logger.summaries import TensorboardSummary
 from torcv.utils.metrics.segmentation_evaluator import Evaluator
 from torcv.solver.lr_scheduler.segmention_scheduler import LR_Scheduler
 
+from torcv.datasets.datasets import get_pascalvoc
+
 
 class Solver(object):
 
     def __init__(self, args):
+        # TODO: augmentation.
+        t = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            transforms.ToTensor()
+        ])
+
+
         self.args = args
         # Savar
         self.saver = Saver(args)
@@ -31,7 +42,19 @@ class Solver(object):
 
         # Dataloader
         kwargs = {'num_workers:': args.num_workers, 'pin_memory': True}
-        self.train_loader, self.val_loader, self.test_loader, self.nclass = 
+        # TODO: dataset download
+        # self.train_loader, self.val_loader, self.test_loader, self.nclass = get_pascalvoc(args, base_dir=args.pascal_dataset_path ,transforms_train=t)
+
+        # Netwok
+        model = deeplabV3plus(backbone=args.backbone,
+                                output_stride=args.out_stride,
+                                # num_classes=self.nclass,
+                                num_classes=21,
+                                sync_bn=args.sync_bn,
+                                freeze_bn=args.freeze_bn)
+
+def main(args):
+    solver = Solver(args)
 
 
 
@@ -51,7 +74,7 @@ if __name__ == '__main__':
                         help='dataset name (default: pascal)')
     parser.add_argument('--use-sbd', action='store_true', default=True,
                         help='whether to use SBD dataset (default: True)')
-    parser.add_argument('--workers', type=int, default=4,
+    parser.add_argument('--num_workers', type=int, default=4,
                         metavar='N', help='dataloader threads')
     parser.add_argument('--base-size', type=int, default=513,
                         help='base image size')
@@ -118,8 +141,7 @@ if __name__ == '__main__':
     parser.add_argument('--coco_dataset_path', type=str, default='./dataset/coco/')
 
     args = parser.parse_args()
-    
-    
+
 
     if args.epochs is None:
         epoches = {
@@ -142,6 +164,7 @@ if __name__ == '__main__':
             'cityscapes': 0.01,
             'pascal': 0.07
         }
+
         args.lr = lrs[args.dataset.lower()] / (4 * torch.cuda.device_count()) * args.batch_size
 
     if args.checkname is None:
@@ -150,4 +173,6 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     torch.backends.cudnn.benchmark = True
     print(args)
+
+    main(args)
     # print('Start Epoch: {}, Total Epoches: {}'.format())

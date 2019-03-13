@@ -114,6 +114,10 @@ class DeepLabV3plus(nn.Module):
                             yield p
 
 
-def deeplabV3plus(backbone='drn_d_54', output_stride=16, num_classes=21):
-    model = DeepLabV3plus(backbone=backbone, output_stride=output_stride, num_classes=num_classes)
+def deeplabV3plus(backbone='drn_d_54', output_stride=16, num_classes=21, sync_bn=True, freeze_bn=False):
+    model = DeepLabV3plus(backbone=backbone,
+                            output_stride=output_stride,
+                            num_classes=num_classes,
+                            sync_bn=sync_bn,
+                            freeze_bn=freeze_bn)
     return model
