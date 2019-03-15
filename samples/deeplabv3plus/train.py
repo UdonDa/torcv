@@ -5,11 +5,15 @@ sys.path.append('../../')
 import argparse
 import os
 import numpy as np
+from tqdm import tqdm
 
 from torcv.links.model.deeplabv3plus.deeplabv3plus import deeplabV3plus
+from torcv.links.model.deeplabv3plus.sync_batchnorm.replicate import patch_replication_callback
+
 import torch
 import torch.nn as nn
 from torchvision import transforms
+from torch.utils.data import DataLoader
 
 from torcv.utils.loss.segmentation_loss import SegmentationLosses
 
@@ -18,20 +22,32 @@ from torcv.utils.logger.summaries import TensorboardSummary
 from torcv.utils.metrics.segmentation_evaluator import Evaluator
 from torcv.solver.lr_scheduler.segmention_scheduler import LR_Scheduler
 
-from torcv.datasets.datasets import get_pascalvoc
+from torchvision.datasets import VOCSegmentation
+
+from sys import exit
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+
+def trainsforms_default():
+    return transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    ])
+
 
 
 class Solver(object):
 
     def __init__(self, args):
         # TODO: augmentation.
-        t = transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        t_val = transforms.Compose([
+            transforms.Resize((224, 224)),
             transforms.ToTensor()
         ])
 
-
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.args = args
         # Savar
         self.saver = Saver(args)
@@ -44,28 +60,173 @@ class Solver(object):
         kwargs = {'num_workers:': args.num_workers, 'pin_memory': True}
         # TODO: dataset download
         # self.train_loader, self.val_loader, self.test_loader, self.nclass = get_pascalvoc(args, base_dir=args.pascal_dataset_path ,transforms_train=t)
+        t = trainsforms_default()
+        self.train_loader = VOCSegmentation(root='./dataset/', year='2012',
+                            image_set='train', download=False, transform=t, target_transform=t_val)
+        
+        self.val_loader = VOCSegmentation(root='./dataset/', year='2012',
+                            image_set='val', download=False, transform=t, target_transform=t_val)
+
+        # Dataset
+        self.train_loader = DataLoader(self.train_loader, batch_size=args.batch_size, shuffle=True,
+                                        num_workers=args.num_workers, drop_last=True, pin_memory=True)
+        self.val_loader = DataLoader(self.val_loader, batch_size=args.batch_size, shuffle=False,
+                                        num_workers=args.num_workers, drop_last=True, pin_memory=True)
 
         # Netwok
-        model = deeplabV3plus(backbone=args.backbone,
+        self.model = deeplabV3plus(backbone=args.backbone,
                                 output_stride=args.out_stride,
                                 # num_classes=self.nclass,
                                 num_classes=21,
                                 sync_bn=args.sync_bn,
-                                freeze_bn=args.freeze_bn)
+                                freeze_bn=args.freeze_bn).to(self.device)
+        train_params = [{'params': self.model.get_1x_lr_params(), 'lr': args.lr},
+                        {'params': self.model.get_10x_lr_params(), 'lr': args.lr * 10}]
+        
+        # Optimizer
+        self.optimizer = torch.optim.SGD(train_params, momentum=args.momentum,
+                                    weight_decay=args.weight_decay, nesterov=args.nesterov)
+        
+        # Criterion
+        # Wether to use class balanced weights.
+        if args.use_balanced_weights:
+            pass # TODO:
+        else:
+            weight = None
+        self.criterion = SegmentationLosses(weight=None).build_loss(mode=args.loss_type)
+
+        # Cuda
+        if args.data_parallel:
+            self.model = torch.nn.DataParallel(self.model)
+            patch_replication_callback(self.model)
+
+        # Evaluator
+        self.evaluator = Evaluator(21)
+        # Lr scheduler
+        self.scheduler = LR_Scheduler(args.lr_scheduler, args.lr, args.epochs, len(self.train_loader))
+        
+        # Resuming checkpoint
+        self.best_pred = 0.0
+        if args.resume is not None:
+            if not os.path.isfile(args.resume):
+                raise RuntimeError('no checkpoint found at: {}'.format(args.resume))
+            checkpoint = torch.load(args.resume)
+            args.start_epoch = checkpoint['epoch']
+            self.model.module.load_state_dict(checkpoint['state_dict'])
+
+            if not args.ft:
+                self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.best_pred = checkpoint['best_pred']
+            print('Loaded checkpoint: {} (epoch: {})'.format(args.resume, checkpoint['epoch']))
+        
+        if args.ft:
+            args.start_epoch = 0
+
+    
+    def training(self, epoch):
+        train_loss = 0.0
+        self.model.train()
+        tbar = tqdm(self.train_loader)
+        num_img_tr = len(self.train_loader)
+        for i, (image, target) in enumerate(tbar):
+            image, target = image.to(self.device), target.to(self.device)
+            target = torch.squeeze(target)
+            self.scheduler(self.optimizer, i, epoch, self.best_pred)
+            
+            self.optimizer.zero_grad()
+            output = self.model(image)
+
+            loss = self.criterion(output, target)
+            loss.backward()
+            self.optimizer.step()
+            train_loss += loss.item()
+
+            tbar.set_description('Train loss: {:.3f}'.format(train_loss / (i + 1)))
+            self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
+
+            # Show 10 * 3 inference results each epoch
+            if i % (num_img_tr // 10) == 0:
+                global_step = i + num_img_tr * epoch
+                self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+
+        self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
+        print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
+        print('Loss: %.3f' % train_loss)
+
+        # if self.args.no_val:
+        # save checkpoint every epoch
+        is_best = False
+        self.saver.save_checkpoint({
+            'epoch': epoch + 1,
+            'state_dict': self.model.module.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'best_pred': self.best_pred,
+        }, is_best)
+
+
+    def validation(self, epoch):
+        self.model.eval()
+        self.evaluator.reset()
+        tbar = tqdm(self.val_loader, desc='\r')
+        test_loss = 0.0
+        for i, (image, target) in enumerate(tbar):
+            image, target = image.to(self.device), target.to(self.device)
+            target = torch.squeeze(target)
+            with torch.no_grad():
+                output = self.model(image)
+            loss = self.criterion(output, target)
+            test_loss += loss.item()
+            tbar.set_description('Test loss: {:.4f}'.format(test_loss / (i + 1)))
+            pred = output.data.cpu().numpy()
+            target = target.cpu().numpy()
+            pred = np.argmax(pred, axis=1)
+            # Add batch sample into evaluator
+            self.evaluator.add_batch(target, pred)
+
+        # Fast test during the training
+        Acc = self.evaluator.Pixel_Accuracy()
+        Acc_class = self.evaluator.Pixel_Accuracy_Class()
+        mIoU = self.evaluator.Mean_Intersection_over_Union()
+        FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
+        self.writer.add_scalar('val/total_loss_epoch', test_loss, epoch)
+        self.writer.add_scalar('val/mIoU', mIoU, epoch)
+        self.writer.add_scalar('val/Acc', Acc, epoch)
+        self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
+        self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
+        print('Validation:')
+        print('[Epoch: {}, numImages: {}]'.format(epoch, i * self.args.batch_size + image.data.shape[0]))
+        print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
+        print('Loss: {:.4f}'.format(test_loss))
+
+        new_pred = mIoU
+        if new_pred > self.best_pred:
+            is_best = True
+            self.best_pred = new_pred
+            self.saver.save_checkpoint({
+                'epoch': epoch + 1,
+                'state_dict': self.model.module.state_dict(),
+                'optimizer': self.optimizer.state_dict(),
+                'best_pred': self.best_pred,
+            }, is_best)
+
 
 def main(args):
     solver = Solver(args)
+    print('Starting Epoch: {}'.format(solver.args.start_epoch))
+    print('Total Epoch: {}'.format(solver.args.epochs))
 
-
-
-
+    for epoch in range(solver.args.start_epoch, solver.args.epochs):
+        solver.training(epoch)
+        solver.validation(epoch)
+    
+    solver.writer.close()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--backbone', type=str, default='drn_d_54',
-                        choices=['resnet', 'xception', 'drn', 'mobilenet'],
+    parser.add_argument('--backbone', type=str, default='xception',
+                        choices=['resnet', 'xception', 'drn', 'mobilenet', 'drn_a_resnet50'],
                         help='backbone name (default: drn_d_54)')
     parser.add_argument('--out-stride', type=int, default=16,
                         help='network output stride (default: 8)')
@@ -120,6 +281,7 @@ if __name__ == '__main__':
                         comma-separated list of integers only (default=0)')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
+    parser.add_argument('--data-parallel', action='store_true', default=True)
     # checking point
     parser.add_argument('--resume', type=str, default=None,
                         help='put the path to resuming file if needed')
@@ -175,4 +337,3 @@ if __name__ == '__main__':
     print(args)
 
     main(args)
-    # print('Start Epoch: {}, Total Epoches: {}'.format())

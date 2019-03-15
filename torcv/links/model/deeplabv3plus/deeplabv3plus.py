@@ -41,19 +41,13 @@ def build_backbone(backbone='drn_d_54', pretrained=True, num_classes=1000):
         return drn_d_54(pretrained=False, BatchNorm=SynchronizedBatchNorm2d)
     elif backbone == 'drn_d_105':
         return drn_d_105(pretrained=False, BatchNorm=SynchronizedBatchNorm2d)
-        
 
 
 class DeepLabV3plus(nn.Module):
-    def __init__(self, backbone='drn_d_54', output_stride=16, num_classes=21,
+    def __init__(self, backbone='resnet', output_stride=16, num_classes=21,
                  sync_bn=True, freeze_bn=False):
-        """
-        Args:
-            backbone (str): [...]
-        """
         super(DeepLabV3plus, self).__init__()
-        self.backbonename = backbone
-        if backbone[0:3] == 'drn':
+        if backbone == 'drn':
             output_stride = 8
 
         if sync_bn == True:
@@ -68,21 +62,13 @@ class DeepLabV3plus(nn.Module):
         if freeze_bn:
             self.freeze_bn()
 
-
-    def forward(self, input): # input: [1, 3, 513, 513]
-        if self.backbonename[0:3] == 'drn' or self.backbonename == 'xception' or self.backbonename == 'mobilenet':
-            x, low_level_feat = self.backbone(input)
-        else:
-            x, low_level_feat = self.backbone(input)
-            print('x.size(): ', x.size())
-            print('low_level_feat.size(): ', low_level_feat.size())
-            exit()
+    def forward(self, input):
+        x, low_level_feat = self.backbone(input)
         x = self.aspp(x)
         x = self.decoder(x, low_level_feat)
         x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)
 
         return x
-
 
     def freeze_bn(self):
         for m in self.modules():
@@ -90,7 +76,6 @@ class DeepLabV3plus(nn.Module):
                 m.eval()
             elif isinstance(m, nn.BatchNorm2d):
                 m.eval()
-
 
     def get_1x_lr_params(self):
         modules = [self.backbone]
@@ -102,7 +87,6 @@ class DeepLabV3plus(nn.Module):
                         if p.requires_grad:
                             yield p
 
-
     def get_10x_lr_params(self):
         modules = [self.aspp, self.decoder]
         for i in range(len(modules)):
@@ -112,7 +96,6 @@ class DeepLabV3plus(nn.Module):
                     for p in m[1].parameters():
                         if p.requires_grad:
                             yield p
-
 
 def deeplabV3plus(backbone='drn_d_54', output_stride=16, num_classes=21, sync_bn=True, freeze_bn=False):
     model = DeepLabV3plus(backbone=backbone,

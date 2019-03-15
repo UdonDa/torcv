@@ -39,7 +39,7 @@ class SegmentationLosses(object):
         pt = torch.exp(logpt)
         if alpha is not None:
             logpt *= alpha
-        loss = -((1 - pt) ** gamma) * logpt
+        loss = - ((1 - pt) ** gamma) * logpt
 
         if self.batch_average:
             loss /= n
@@ -48,7 +48,7 @@ class SegmentationLosses(object):
 
 if __name__ == "__main__":
     loss = SegmentationLosses()
-    a = torch.rand(1, 3, 7, 7)
+    a = torch.rand(1, 21, 7, 7)
     b = torch.rand(1, 7, 7)
     print(loss.CrossEntropyLoss(a, b).item()) # -> 1.1420199871063232
     print(loss.FocalLoss(a, b, gamma=0, alpha=None).item()) # -> 1.1420199871063232
