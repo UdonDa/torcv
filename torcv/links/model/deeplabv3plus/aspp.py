@@ -33,7 +33,6 @@ class _ASPPModule(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-
 class ASPP(nn.Module):
     def __init__(self, backbone, output_stride, BatchNorm):
         super(ASPP, self).__init__()
@@ -41,8 +40,9 @@ class ASPP(nn.Module):
             inplanes = 512
         elif backbone == 'mobilenet':
             inplanes = 320
-        elif backbone == 'xception':
+        else:
             inplanes = 2048
+
         if output_stride == 16:
             dilations = [1, 6, 12, 18]
         elif output_stride == 8:
@@ -55,22 +55,21 @@ class ASPP(nn.Module):
         self.aspp3 = _ASPPModule(inplanes, 256, 3, padding=dilations[2], dilation=dilations[2], BatchNorm=BatchNorm)
         self.aspp4 = _ASPPModule(inplanes, 256, 3, padding=dilations[3], dilation=dilations[3], BatchNorm=BatchNorm)
 
-        self.global_avg_pool = nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)), # [1, 320, 1, 1]
-                                             nn.Conv2d(inplanes, 256, 1, stride=1, bias=False), # [1, 256, 1, 1]
-                                            #  BatchNorm(256), # TODO: ValueError: Expected more than 1 value per channel when training, got input size [1, 256, 1, 1]s
-                                             nn.ReLU(),
-                                             )
+        self.global_avg_pool = nn.Sequential(nn.AdaptiveAvgPool2d((1, 1)),
+                                             nn.Conv2d(inplanes, 256, 1, stride=1, bias=False),
+                                             BatchNorm(256),
+                                             nn.ReLU())
         self.conv1 = nn.Conv2d(1280, 256, 1, bias=False)
         self.bn1 = BatchNorm(256)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(0.5)
         self._init_weight()
 
-    def forward(self, x): # x: [1, 320, 33, 33]
-        x1 = self.aspp1(x) # x1: [1, 256, 33, 33]
-        x2 = self.aspp2(x) # x2: [1, 256, 33, 33]
-        x3 = self.aspp3(x) # x3: [1, 256, 33, 33]
-        x4 = self.aspp4(x) # x4: [1, 256, 33, 33]
+    def forward(self, x):
+        x1 = self.aspp1(x)
+        x2 = self.aspp2(x)
+        x3 = self.aspp3(x)
+        x4 = self.aspp4(x)
         x5 = self.global_avg_pool(x)
         x5 = F.interpolate(x5, size=x4.size()[2:], mode='bilinear', align_corners=True)
         x = torch.cat((x1, x2, x3, x4, x5), dim=1)
