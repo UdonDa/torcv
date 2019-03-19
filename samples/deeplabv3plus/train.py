@@ -23,9 +23,10 @@ from torcv.utils.metrics.segmentation_evaluator import Evaluator
 from torcv.solver.lr_scheduler.segmention_scheduler import LR_Scheduler
 
 from torchvision.datasets import VOCSegmentation
+from torchvision.utils import save_image
 
 from sys import exit
-from PIL import ImageFile
+from PIL import ImageFile, Image
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
@@ -36,6 +37,35 @@ def trainsforms_default():
         transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
     ])
 
+def get_palette(num_cls):
+    """ Returns the color map for visualizing the segmentation mask.
+    Args:
+        num_cls: Number of classes
+    Returns:
+        The color map
+    """
+    n = num_cls
+    palette = [0] * (n * 3)
+    for j in range(0, n):
+        lab = j
+        palette[j * 3 + 0] = 0
+        palette[j * 3 + 1] = 0
+        palette[j * 3 + 2] = 0
+        i = 0
+        while lab:
+            palette[j * 3 + 0] |= (((lab >> 0) & 1) << (7 - i))
+            palette[j * 3 + 1] |= (((lab >> 1) & 1) << (7 - i))
+            palette[j * 3 + 2] |= (((lab >> 2) & 1) << (7 - i))
+            i += 1
+            lab >>= 3
+    return palette
+
+def mask2png(mask):
+    palette = get_palette(256)
+    mask=Image.fromarray(mask.astype(np.uint8))
+    mask.putpalette(palette)
+    mask = np.asarray(mask)
+    return mask
 
 
 class Solver(object):
@@ -49,6 +79,7 @@ class Solver(object):
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.args = args
+        self.get_palette = get_palette(256)
         # Savar
         self.saver = Saver(args)
         self.saver.save_experiment_config()
@@ -123,6 +154,47 @@ class Solver(object):
             args.start_epoch = 0
 
     
+    # def training(self, epoch):
+    #     train_loss = 0.0
+    #     self.model.train()
+    #     tbar = tqdm(self.train_loader)
+    #     num_img_tr = len(self.train_loader)
+    #     for i, (image, target) in enumerate(tbar):
+    #         image, target = image.to(self.device), target.to(self.device)
+    #         target = torch.squeeze(target)
+    #         self.scheduler(self.optimizer, i, epoch, self.best_pred)
+            
+    #         self.optimizer.zero_grad()
+    #         output = self.model(image)
+
+    #         loss = self.criterion(output, target)
+    #         loss.backward()
+    #         self.optimizer.step()
+    #         train_loss += loss.item()
+
+    #         tbar.set_description('Train loss: {:.3f}'.format(train_loss / (i + 1)))
+    #         self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
+
+    #         # Show 10 * 3 inference results each epoch
+    #         if i % (num_img_tr // 10) == 0:
+    #             global_step = i + num_img_tr * epoch
+    #             self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+
+    #     self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
+    #     print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
+    #     print('Loss: %.3f' % train_loss)
+
+    #     # if self.args.no_val:
+    #     # save checkpoint every epoch
+    #     is_best = False
+    #     self.saver.save_checkpoint({
+    #         'epoch': epoch + 1,
+    #         'state_dict': self.model.module.state_dict(),
+    #         'optimizer': self.optimizer.state_dict(),
+    #         'best_pred': self.best_pred,
+    #     }, is_best)
+
+
     def training(self, epoch):
         train_loss = 0.0
         self.model.train()
@@ -131,17 +203,15 @@ class Solver(object):
         for i, (image, target) in enumerate(tbar):
             image, target = image.to(self.device), target.to(self.device)
             target = torch.squeeze(target)
+
             self.scheduler(self.optimizer, i, epoch, self.best_pred)
-            
             self.optimizer.zero_grad()
             output = self.model(image)
-
             loss = self.criterion(output, target)
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
-
-            tbar.set_description('Train loss: {:.3f}'.format(train_loss / (i + 1)))
+            tbar.set_description('Train loss: %.3f' % (train_loss / (i + 1)))
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
@@ -153,15 +223,15 @@ class Solver(object):
         print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
         print('Loss: %.3f' % train_loss)
 
-        # if self.args.no_val:
-        # save checkpoint every epoch
-        is_best = False
-        self.saver.save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': self.model.module.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
-            'best_pred': self.best_pred,
-        }, is_best)
+        if self.args.no_val:
+            # save checkpoint every epoch
+            is_best = False
+            self.saver.save_checkpoint({
+                'epoch': epoch + 1,
+                'state_dict': self.model.module.state_dict(),
+                'optimizer': self.optimizer.state_dict(),
+                'best_pred': self.best_pred,
+            }, is_best)
 
 
     def validation(self, epoch):
@@ -169,19 +239,34 @@ class Solver(object):
         self.evaluator.reset()
         tbar = tqdm(self.val_loader, desc='\r')
         test_loss = 0.0
+
         for i, (image, target) in enumerate(tbar):
             image, target = image.to(self.device), target.to(self.device)
-            target = torch.squeeze(target)
+            target_squeezed = torch.squeeze(target)
             with torch.no_grad():
                 output = self.model(image)
-            loss = self.criterion(output, target)
+            loss = self.criterion(output, target_squeezed)
             test_loss += loss.item()
             tbar.set_description('Test loss: {:.4f}'.format(test_loss / (i + 1)))
-            pred = output.data.cpu().numpy()
-            target = target.cpu().numpy()
-            pred = np.argmax(pred, axis=1)
+            pred_numpy = output.data.cpu().numpy()
+            target_squeezed = target_squeezed.cpu().numpy()
+            pred = np.argmax(pred_numpy, axis=1)
             # Add batch sample into evaluator
-            self.evaluator.add_batch(target, pred)
+            self.evaluator.add_batch(target_squeezed, pred)
+
+            if i % 30 == 0:
+                pred = pred[0, :, :]
+                pred = mask2png(pred)
+
+                pred = torch.from_numpy(pred)
+                pred = torch.unsqueeze(pred, 0)
+
+                image, target, pred = image[0,:,:,: ].cpu().float(), target[0,:,:,: ].cpu().float(), pred.float()
+                target = torch.cat([target, target, target], dim=0)
+                pred = torch.cat([pred, pred, pred], dim=0)
+                concated = torch.cat([image.float(), target.float(), pred.float()], dim=2)
+                save_image(concated, './tmp/{}_{}_mask.png'.format(epoch, i))
+
 
         # Fast test during the training
         Acc = self.evaluator.Pixel_Accuracy()
@@ -195,7 +280,7 @@ class Solver(object):
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
         print('Validation:')
         print('[Epoch: {}, numImages: {}]'.format(epoch, i * self.args.batch_size + image.data.shape[0]))
-        print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
+        print("Acc:{:.4f}, Acc_class:{:.4f}, mIoU:{:.4f}, fwIoU: {:.4f}".format(Acc, Acc_class, mIoU, FWIoU))
         print('Loss: {:.4f}'.format(test_loss))
 
         new_pred = mIoU
@@ -208,7 +293,6 @@ class Solver(object):
                 'optimizer': self.optimizer.state_dict(),
                 'best_pred': self.best_pred,
             }, is_best)
-
 
 def main(args):
     solver = Solver(args)

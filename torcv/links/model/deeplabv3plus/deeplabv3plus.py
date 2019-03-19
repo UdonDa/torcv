@@ -14,6 +14,7 @@ from torcv.links.model.deeplabv3plus.backbone.xception import aligned_xception
 
 
 def build_backbone(backbone='drn_d_54', pretrained=True, num_classes=1000):
+    print('Pretrained model: {}'.format(pretrained))
     # xception
     if backbone == 'xception':
         return aligned_xception(pretrained=pretrained)
@@ -22,25 +23,25 @@ def build_backbone(backbone='drn_d_54', pretrained=True, num_classes=1000):
         return mobilenetV2(pretrained=pretrained)
     # drn
     elif backbone == 'drn_a_resnet50':
-        return drn_a_resnet50(pretrained=False, BatchNorm=nn.BatchNorm2d)
+        return drn_a_resnet50(pretrained=pretrained, BatchNorm=nn.BatchNorm2d)
     elif backbone == 'drn_c_26':
-        return drn_c_26(pretrained=False, BatchNorm=nn.BatchNorm2d)
+        return drn_c_26(pretrained=pretrained, BatchNorm=nn.BatchNorm2d)
     elif backbone == 'drn_c_42':
-        return drn_c_42(pretrained=False, BatchNorm=nn.BatchNorm2d)
+        return drn_c_42(pretrained=pretrained, BatchNorm=nn.BatchNorm2d)
     elif backbone == 'drn_c_58':
-        return drn_c_58(pretrained=False, BatchNorm=nn.BatchNorm2d)
+        return drn_c_58(pretrained=pretrained, BatchNorm=nn.BatchNorm2d)
     elif backbone == 'drn_d_22':
-        return drn_d_22(pretrained=False, BatchNorm=nn.BatchNorm2d)
+        return drn_d_22(pretrained=pretrained, BatchNorm=nn.BatchNorm2d)
     elif backbone == 'drn_d_24':
-        return drn_d_24(pretrained=False, BatchNorm=nn.BatchNorm2d)
+        return drn_d_24(pretrained=pretrained, BatchNorm=nn.BatchNorm2d)
     elif backbone == 'drn_d_38':
-        return drn_d_38(pretrained=False, BatchNorm=SynchronizedBatchNorm2d)
+        return drn_d_38(pretrained=pretrained, BatchNorm=SynchronizedBatchNorm2d)
     elif backbone == 'drn_d_40':
-        return drn_d_40(pretrained=False, BatchNorm=SynchronizedBatchNorm2d)
+        return drn_d_40(pretrained=pretrained, BatchNorm=SynchronizedBatchNorm2d)
     elif backbone == 'drn_d_54':
-        return drn_d_54(pretrained=False, BatchNorm=SynchronizedBatchNorm2d)
+        return drn_d_54(pretrained=pretrained, BatchNorm=SynchronizedBatchNorm2d)
     elif backbone == 'drn_d_105':
-        return drn_d_105(pretrained=False, BatchNorm=SynchronizedBatchNorm2d)
+        return drn_d_105(pretrained=pretrained, BatchNorm=SynchronizedBatchNorm2d)
 
 
 class DeepLabV3plus(nn.Module):
@@ -55,7 +56,7 @@ class DeepLabV3plus(nn.Module):
         else:
             BatchNorm = nn.BatchNorm2d
 
-        self.backbone = build_backbone(backbone, output_stride, BatchNorm)
+        self.backbone = build_backbone(backbone=backbone, pretrained=True)
         self.aspp = build_aspp(backbone, output_stride, BatchNorm)
         self.decoder = build_decoder(num_classes, backbone, BatchNorm)
 
